@@ -3,6 +3,7 @@ import { sql } from "@vercel/postgres";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { signIn } from "@/auth";
 
 export type State = {
   errors?: {
@@ -16,36 +17,36 @@ export type State = {
 const InvoiceSchema = z.object({
   id: z.string(),
   customerId: z.string({
-    invalid_type_error: 'Please select a customer.',
+    invalid_type_error: "Please select a customer.",
   }),
   amount: z.coerce
     .number()
-    .gt(0, { message: 'Please enter an amount greater than $0.' }),
-  status: z.enum(['pending', 'paid'], {
-    invalid_type_error: 'Please select an invoice status.',
+    .gt(0, { message: "Please enter an amount greater than $0." }),
+  status: z.enum(["pending", "paid"], {
+    invalid_type_error: "Please select an invoice status.",
   }),
   date: z.string(),
 });
 
 const CreateInvoice = InvoiceSchema.omit({ id: true, date: true });
 
-export async function createInvoice(prevState:State, formData: FormData) {
+export async function createInvoice(prevState: State, formData: FormData) {
   try {
     const validatedFields = CreateInvoice.safeParse({
-      customerId: formData.get('customerId'),
-      amount: formData.get('amount'),
-      status: formData.get('status'),
+      customerId: formData.get("customerId"),
+      amount: formData.get("amount"),
+      status: formData.get("status"),
     });
-   
+
     // If form validation fails, return errors early. Otherwise, continue.
     if (!validatedFields.success) {
       return {
         errors: validatedFields.error.flatten().fieldErrors,
-        message: 'Missing Fields. Failed to Create Invoice.',
+        message: "Missing Fields. Failed to Create Invoice.",
       };
     }
     const { customerId, amount, status } = validatedFields.data;
-    console.log(validatedFields, "This is the console of validatedFields...")
+    console.log(validatedFields, "This is the console of validatedFields...");
     console.log(customerId, amount, status);
     //   It's usually good practice to store monetary values in cents in your database to eliminate JavaScript floating-point errors and ensure greater accuracy.
     const amountInCents = amount * 100;
@@ -57,7 +58,7 @@ export async function createInvoice(prevState:State, formData: FormData) {
     `;
   } catch (err) {
     return {
-      message: 'Database Error: Failed to Create Invoice.',
+      message: "Database Error: Failed to Create Invoice.",
     };
   }
   revalidatePath("/dashboard/invoices");
@@ -66,22 +67,25 @@ export async function createInvoice(prevState:State, formData: FormData) {
 
 const UpdateInvoice = InvoiceSchema.omit({ date: true });
 
-export async function updateInvoice(id: string, prevState:State, formData: FormData) {
-  
+export async function updateInvoice(
+  id: string,
+  prevState: State,
+  formData: FormData
+) {
   try {
     const validatedFields = UpdateInvoice.safeParse({
-      customerId: formData.get('customerId'),
-      amount: formData.get('amount'),
-      status: formData.get('status'),
+      customerId: formData.get("customerId"),
+      amount: formData.get("amount"),
+      status: formData.get("status"),
     });
-   
+
     if (!validatedFields.success) {
       return {
         errors: validatedFields.error.flatten().fieldErrors,
-        message: 'Missing Fields. Failed to Update Invoice.',
+        message: "Missing Fields. Failed to Update Invoice.",
       };
     }
-   
+
     const { customerId, amount, status } = validatedFields.data;
     const amountInCents = amount * 100;
 
@@ -90,11 +94,10 @@ export async function updateInvoice(id: string, prevState:State, formData: FormD
       SET customer_id = ${customerId}, amount = ${amountInCents}, status = ${status}
       WHERE id = ${id}
     `;
-
-  } catch (err:unknown) {
-    return { message: 'Database Error: Failed to Update Invoice.' };
+  } catch (err: unknown) {
+    return { message: "Database Error: Failed to Update Invoice." };
   }
-  // should be at the end of the function, why? 
+  // should be at the end of the function, why?
   // because it's a side effect, it's not part of the logic of the function
   revalidatePath("/dashboard/invoices");
   redirect("/dashboard/invoices");
@@ -104,9 +107,23 @@ export async function deleteInvoice(id: string) {
   // throw new Error("Not Implemented");
   try {
     await sql`DELETE FROM invoices WHERE id = ${id}`;
-    revalidatePath('/dashboard/invoices');
-    return { message: 'Deleted Invoice.' };
+    revalidatePath("/dashboard/invoices");
+    return { message: "Deleted Invoice." };
   } catch (error) {
-    return { message: 'Database Error: Failed to Delete Invoice.' };
+    return { message: "Database Error: Failed to Delete Invoice." };
+  }
+}
+
+export async function authenticate(
+  prevState: string | undefined,
+  formData: FormData,
+) {
+  try {
+    await signIn('credentials', Object.fromEntries(formData));
+  } catch (error) {
+    if ((error as Error).message.includes('CredentialsSignin')) {
+      return 'CredentialSignin';
+    }
+    throw error;
   }
 }
